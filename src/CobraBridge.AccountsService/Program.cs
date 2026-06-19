@@ -15,9 +15,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 // Dev-only default credentials — never used outside this local/demo stack.
-// docker-compose and any real deployment override this via ConnectionStrings__Accounts.
+// Database-per-service: "cobrabridge_accounts" is this service's own
+// database (see docs/architecture.md). docker-compose and any real
+// deployment override this via ConnectionStrings__Accounts.
 var connectionString = builder.Configuration.GetConnectionString("Accounts")
-    ?? "Host=localhost;Port=5432;Database=cobrabridge;Username=cobrabridge;Password=cobrabridge_dev_only_change_me";
+    ?? "Host=localhost;Port=5432;Database=cobrabridge_accounts;Username=cobrabridge;Password=cobrabridge_dev_only_change_me";
 
 builder.Services.AddDbContext<AccountsDbContext>(options => options.UseNpgsql(connectionString));
 

@@ -24,6 +24,7 @@ The interesting decisions are written down as ADRs, not buried in commits:
 - [ADR-0003 — YARP API gateway](docs/adr/0003-yarp-api-gateway.md)
 - [ADR-0004 — RabbitMQ event-driven messaging](docs/adr/0004-rabbitmq-eventing.md)
 - [ADR-0005 — SignalR real-time dashboard](docs/adr/0005-signalr-realtime.md)
+- [ADR-0006 — Database-per-service on a shared PostgreSQL server](docs/adr/0006-database-per-service.md)
 
 Full picture: [docs/architecture.md](docs/architecture.md).
 
@@ -48,7 +49,7 @@ Full picture: [docs/architecture.md](docs/architecture.md).
 | 0 | Foundations (repo, docs, ADRs, compose, CI) | ✅ done |
 | 1 | Legacy core: COBOL batch + data, containerized | ✅ runs today |
 | 2 | The bridge: COBOL → JSON over HTTP | ✅ done |
-| 3 | Microservices behind the gateway | 🟡 in progress (3a: gateway, 3b: accounts + strangler switch) |
+| 3 | Microservices behind the gateway | 🟡 in progress (3a: gateway, 3b: accounts + strangler switch, 3c: customers) |
 | 4 | Event-driven + real-time dashboard | ⬜ planned |
 | 5 | CI/CD hardening, observability, tests | ⬜ planned |
 
@@ -164,6 +165,40 @@ gateway: `AccountsSource=modern dotnet run --project src/CobraBridge.Gateway`
 `postgres` and `accounts-service` have no published ports in docker-compose
 — like the bridge, they're internal-only, reached by name on the compose
 network.
+
+```bash
+dotnet test src/CobraBridge.sln
+```
+
+## Run the customers service (a net-new capability)
+
+Phase 3c adds **CustomersService**: customer profiles with KYC status. This
+one isn't a migration — the COBOL core never had a notion of "customer" or
+KYC at all, so there's nothing to strangle. It's a modern capability the
+mainframe simply couldn't offer, built straight on PostgreSQL behind the
+gateway, no legacy source, no switch.
+
+It follows database-per-service (see
+[ADR-0006](docs/adr/0006-database-per-service.md)): same Postgres server as
+AccountsService, separate database (`cobrabridge_customers` vs.
+`cobrabridge_accounts`).
+
+```bash
+# locally
+dotnet run --project src/CobraBridge.CustomersService
+
+# or as part of the full stack
+docker compose up -d legacy-core postgres bridge accounts-service customers-service gateway
+```
+
+```bash
+curl http://localhost:8090/api/customers
+curl http://localhost:8090/api/customers/CUST000003
+curl "http://localhost:8090/api/customers?kycStatus=Verified"
+```
+
+`customers-service` has no published port either — reached only through the
+gateway, like every other internal service.
 
 ```bash
 dotnet test src/CobraBridge.sln

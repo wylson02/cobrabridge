@@ -80,6 +80,33 @@ public class GatewayTests
         Assert.Equal("/accounts", fakeAccountsService.LastReceivedPath);
     }
 
+    // Customers has no Strangler switch — net-new capability, one backend.
+    // Smoke test: the route reaches CustomersService with "/api" stripped,
+    // same as the accounts routes.
+    [Fact]
+    public async Task ApiCustomersRoute_ProxiesToCustomersService_AndStripsApiPrefix()
+    {
+        await using var fakeCustomersService = await FakeUpstream.StartAsync();
+
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ReverseProxy:Clusters:customers-svc:Destinations:d1:Address"] = fakeCustomersService.Address
+                    });
+                });
+            });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/customers/CUST000003");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("/customers/CUST000003", fakeCustomersService.LastReceivedPath);
+    }
+
     [Theory]
     [InlineData(null, "legacy")]
     [InlineData("modern", "modern")]

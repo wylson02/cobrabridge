@@ -67,7 +67,7 @@ Strangler Fig story into something a recruiter can *see* in ten seconds.
 | 0 | Foundations: repo, docs, ADRs, docker-compose skeleton, CI | **done** |
 | 1 | Legacy core: GnuCOBOL batch + fixed-width data (containerized) | **done** |
 | 2 | The bridge (ACL): C# service wrapping COBOL, first modern endpoint | **done** |
-| 3 | Microservices behind the YARP gateway | **in progress (3a: gateway, 3b: accounts + strangler switch)** |
+| 3 | Microservices behind the YARP gateway | **in progress (3a: gateway, 3b: accounts + strangler switch, 3c: customers)** |
 | 4 | Event-driven + real-time React/SignalR dashboard | planned |
 | 5 | CI/CD hardening, observability, tests, polish | planned |
 
@@ -80,8 +80,46 @@ Phase 3b delivered the modern side of the swap and the Strangler switch
 itself — see below. The shared `Account` model, `FixedWidthAccountParser`,
 and the legacy-file path resolver moved out of the Bridge into
 `CobraBridge.Domain` so AccountsService could reuse them instead of
-duplicating them. Phases 3c–d (transactions, customers microservices) are
-not built yet.
+duplicating them.
+
+Phase 3c delivered CustomersService — see "Migration vs. net-new" below.
+Phase 3d (transactions microservice) is not built yet.
+
+## Migration vs. net-new
+
+Not every capability behind the gateway is a Strangler migration of
+something COBOL already did. CobraBridge deliberately has both kinds, side
+by side, because that's what real modernization looks like:
+
+```
+Migrated (Strangler):  /api/accounts
+  COBOL already does this -> Bridge parses it live, AccountsService holds a
+  migrated copy in Postgres, AccountsSource picks which one answers. The
+  point is the *swap* being invisible to the client.
+
+Net-new (no legacy equivalent): /api/customers
+  COBOL never had this -> CustomersService is the only and original source.
+  There is nothing to migrate, nothing to strangle, no AccountsSource-style
+  switch — just one backend behind the gateway, like any other service
+  would be in a system built from scratch.
+```
+
+Conflating the two would misrepresent both: claiming `/api/customers` was
+"migrated" would invent a legacy capability that never existed, and treating
+`/api/accounts` as plain net-new work would hide the actual hard part — the
+anti-corruption layer and the live cutover. The gateway config says so
+explicitly (see `customers-svc` cluster comments in
+`src/CobraBridge.Gateway/appsettings.json`).
+
+## Database-per-service (Phase 3b/3c)
+
+AccountsService and CustomersService each own their own PostgreSQL
+database — `cobrabridge_accounts` and `cobrabridge_customers` — on one
+shared Postgres server (see [ADR-0006](adr/0006-database-per-service.md)).
+Neither service ever queries the other's database; the gateway/HTTP
+boundary is the only sanctioned integration point. `postgres/init/*.sql`
+creates the second database the first time the data volume initializes
+(`POSTGRES_DB` only creates one).
 
 ## The Strangler switch (Phase 3b)
 
@@ -122,18 +160,21 @@ for the full walkthrough.
 ```
 cobrabridge/
 ├── README.md
-├── docker-compose.yml          # orchestrates the whole system locally
+├── docker-compose.yml                 # orchestrates the whole system locally
+├── postgres/init/                     # one-time DB-per-service creation scripts
 ├── docs/
-│   ├── architecture.md         # this file
-│   └── adr/                    # architecture decision records
-├── legacy-core/                # the COBOL "mainframe" (Phase 1, runs today)
-├── src/                              # .NET solution (gateway, services, bridge)
-│   ├── CobraBridge.Domain/             # shared Account model, legacy parser, path resolver
-│   ├── CobraBridge.Domain.Tests/       # parser + path resolver tests
-│   ├── CobraBridge.Bridge/             # anti-corruption layer (Phase 2, done)
-│   ├── CobraBridge.AccountsService/    # modern accounts API (Phase 3b, Postgres-backed)
-│   ├── CobraBridge.AccountsService.Tests/ # mapper, seeder, endpoint, legacy/modern equivalence tests
-│   ├── CobraBridge.Gateway/            # YARP API gateway + Strangler switch (Phase 3a/3b)
-│   └── CobraBridge.Gateway.Tests/      # health, routing, and switch tests for the gateway
+│   ├── architecture.md                # this file
+│   └── adr/                           # architecture decision records
+├── legacy-core/                       # the COBOL "mainframe" (Phase 1, runs today)
+├── src/                                  # .NET solution (gateway, services, bridge)
+│   ├── CobraBridge.Domain/                 # shared Account model, legacy parser, path resolver
+│   ├── CobraBridge.Domain.Tests/           # parser + path resolver tests
+│   ├── CobraBridge.Bridge/                 # anti-corruption layer (Phase 2, done)
+│   ├── CobraBridge.AccountsService/        # modern accounts API (Phase 3b, migrated, Postgres-backed)
+│   ├── CobraBridge.AccountsService.Tests/  # mapper, seeder, endpoint, legacy/modern equivalence tests
+│   ├── CobraBridge.CustomersService/       # customer/KYC API (Phase 3c, net-new, Postgres-backed)
+│   ├── CobraBridge.CustomersService.Tests/ # mapper, seeder, endpoint, KYC-filter tests
+│   ├── CobraBridge.Gateway/                # YARP API gateway + Strangler switch (Phase 3a/3b/3c)
+│   └── CobraBridge.Gateway.Tests/          # health, routing, and switch tests for the gateway
 └── .github/workflows/ci.yml    # build + test pipeline
 ```

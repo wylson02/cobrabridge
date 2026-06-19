@@ -1,9 +1,10 @@
 # CobraBridge — local orchestration.
-# Phase 1 (legacy-core), Phase 2 (bridge), and Phase 3a/b (gateway, postgres,
-# accounts-service, Strangler switch) run today. The gateway is the only
-# service with a published port: everything else is reachable only on the
-# internal compose network. Later phases are scaffolded and commented until
-# their services exist, so `docker compose up` always works.
+# Phase 1 (legacy-core), Phase 2 (bridge), and Phase 3a/b/c (gateway,
+# postgres, accounts-service, Strangler switch, customers-service) run
+# today. The gateway is the only service with a published port: everything
+# else is reachable only on the internal compose network. Later phases are
+# scaffolded and commented until their services exist, so
+# `docker compose up` always works.
 
 services:
   legacy-core:
@@ -30,22 +31,26 @@ services:
     depends_on:
       - legacy-core
 
-  # --- Phase 3b: PostgreSQL for the modern AccountsService ---
+  # --- Phase 3b/c: PostgreSQL, shared server, one database per service ---
+  # (see docs/architecture.md and ADR-0006). POSTGRES_DB creates
+  # "cobrabridge_accounts"; postgres/init/01-create-customers-db.sql creates
+  # "cobrabridge_customers" the first time the data volume initializes.
   postgres:
     image: postgres:16
     container_name: cobrabridge-postgres
     environment:
       # Dev-only default credentials — never used outside this local/demo
       # stack. Override via POSTGRES_PASSWORD if that ever matters here.
-      - POSTGRES_DB=cobrabridge
+      - POSTGRES_DB=cobrabridge_accounts
       - POSTGRES_USER=cobrabridge
       - POSTGRES_PASSWORD=cobrabridge_dev_only_change_me
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    # No published port: internal-only, reached by accounts-service via the
-    # "postgres" service name on the compose network.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    # No published port: internal-only, reached by accounts-service and
+    # customers-service via the "postgres" service name on the compose network.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cobrabridge -d cobrabridge"]
+      test: ["CMD-SHELL", "pg_isready -U cobrabridge"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -58,7 +63,7 @@ services:
     image: cobrabridge-accounts-service
     container_name: cobrabridge-accounts-service
     environment:
-      - ConnectionStrings__Accounts=Host=postgres;Port=5432;Database=cobrabridge;Username=cobrabridge;Password=cobrabridge_dev_only_change_me
+      - ConnectionStrings__Accounts=Host=postgres;Port=5432;Database=cobrabridge_accounts;Username=cobrabridge;Password=cobrabridge_dev_only_change_me
       - Legacy__AccountsFile=/legacy/data/ACCOUNTS.DAT
     volumes:
       # read-only access to the legacy master, for the one-time seed migration
@@ -71,12 +76,28 @@ services:
       legacy-core:
         condition: service_completed_successfully
 
-  # --- Phase 3a/b: API gateway (YARP) — the single public entry point ---
+  # --- Phase 3c: the Customers service (PostgreSQL-backed, net-new) ---
+  customers-service:
+    build:
+      context: ./src/CobraBridge.CustomersService
+    image: cobrabridge-customers-service
+    container_name: cobrabridge-customers-service
+    environment:
+      - ConnectionStrings__Customers=Host=postgres;Port=5432;Database=cobrabridge_customers;Username=cobrabridge;Password=cobrabridge_dev_only_change_me
+    # No published port: internal-only, reached by the gateway via the
+    # "customers-service" service name on the compose network.
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Phase 3a/b/c: API gateway (YARP) — the single public entry point ---
   # AccountsSource picks which backend answers /api/accounts: "legacy" (the
   # Bridge/COBOL, the default below) or "modern" (accounts-service/Postgres).
   # Flip it with: docker compose up -d --build --force-recreate
   #               -e ACCOUNTS_SOURCE=modern gateway
   # or simpler: ACCOUNTS_SOURCE=modern docker compose up -d gateway
+  # /api/customers has no such switch — it's a net-new capability with a
+  # single backend (customers-service), not a legacy/modern migration.
   gateway:
     build: ./src/CobraBridge.Gateway
     image: cobrabridge-gateway
@@ -85,6 +106,7 @@ services:
       - AccountsSource=${ACCOUNTS_SOURCE:-legacy}
       - Services__Bridge=http://bridge:8080/
       - Services__AccountsService=http://accounts-service:8080/
+      - ReverseProxy__Clusters__customers-svc__Destinations__d1__Address=http://customers-service:8080/
     ports:
       # Host 8080 is taken by an unrelated local container on this machine;
       # the gateway still listens on 8080 inside its own container.
@@ -92,10 +114,10 @@ services:
     depends_on:
       - bridge
       - accounts-service
+      - customers-service
 
-  # --- Phase 3c/d: microservices behind the gateway ---
+  # --- Phase 3d: microservices behind the gateway ---
   # transactions-svc: { }
-  # customers-svc:  { }
 
   # --- Phase 4: messaging + dashboard ---
   # rabbitmq:       { image: rabbitmq:3-management }
