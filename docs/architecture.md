@@ -66,7 +66,7 @@ Strangler Fig story into something a recruiter can *see* in ten seconds.
 |-------|-------------|--------|
 | 0 | Foundations: repo, docs, ADRs, docker-compose skeleton, CI | **done** |
 | 1 | Legacy core: GnuCOBOL batch + fixed-width data (containerized) | **done** |
-| 2 | The bridge (ACL): C# service wrapping COBOL, first modern endpoint | scaffolded |
+| 2 | The bridge (ACL): C# service wrapping COBOL, first modern endpoint | **done** |
 | 3 | Microservices behind the YARP gateway | planned |
 | 4 | Event-driven + real-time React/SignalR dashboard | planned |
 | 5 | CI/CD hardening, observability, tests, polish | planned |
@@ -82,6 +82,7 @@ cobrabridge/
 │   └── adr/                    # architecture decision records
 ├── legacy-core/                # the COBOL "mainframe" (Phase 1, runs today)
 ├── src/                        # .NET solution (gateway, services, bridge)
-│   └── CobraBridge.Bridge/     # anti-corruption layer (Phase 2 scaffold)
+│   ├── CobraBridge.Bridge/       # anti-corruption layer (Phase 2, done)
+│   └── CobraBridge.Bridge.Tests/ # unit tests for the legacy parser
 └── .github/workflows/ci.yml    # build + test pipeline
 ```

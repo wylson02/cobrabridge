@@ -1,6 +1,7 @@
 # CobraBridge — local orchestration.
-# Phase 1 (legacy-core) runs today. Later phases are scaffolded and
-# commented until their services exist, so `docker compose up` always works.
+# Phase 1 (legacy-core) and Phase 2 (bridge) run today. Later phases are
+# scaffolded and commented until their services exist, so
+# `docker compose up` always works.
 
 services:
   legacy-core:
@@ -11,17 +12,19 @@ services:
       # expose the account master so the bridge can read it
       - legacy-data:/legacy/data
 
-  # --- Phase 2: the anti-corruption layer (uncomment when ready) ---
-  # bridge:
-  #   build: ./src/CobraBridge.Bridge
-  #   environment:
-  #     - Legacy__AccountsFile=/legacy/data/ACCOUNTS.DAT
-  #   volumes:
-  #     - legacy-data:/legacy/data:ro
-  #   ports:
-  #     - "5080:8080"
-  #   depends_on:
-  #     - legacy-core
+  # --- Phase 2: the anti-corruption layer ---
+  bridge:
+    build: ./src/CobraBridge.Bridge
+    image: cobrabridge-bridge
+    container_name: cobrabridge-bridge
+    environment:
+      - Legacy__AccountsFile=/legacy/data/ACCOUNTS.DAT
+    volumes:
+      - legacy-data:/legacy/data:ro
+    ports:
+      - "5080:8080"
+    depends_on:
+      - legacy-core
 
   # --- Phase 3: gateway + microservices ---
   # gateway:        { } # YARP

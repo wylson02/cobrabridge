@@ -47,7 +47,7 @@ Full picture: [docs/architecture.md](docs/architecture.md).
 |-------|------|-------|
 | 0 | Foundations (repo, docs, ADRs, compose, CI) | ✅ done |
 | 1 | Legacy core: COBOL batch + data, containerized | ✅ runs today |
-| 2 | The bridge: COBOL → JSON over HTTP | 🟡 scaffolded |
+| 2 | The bridge: COBOL → JSON over HTTP | ✅ done |
 | 3 | Microservices behind the gateway | ⬜ planned |
 | 4 | Event-driven + real-time dashboard | ⬜ planned |
 | 5 | CI/CD hardening, observability, tests | ⬜ planned |
@@ -69,6 +69,38 @@ cd legacy-core
 
 You'll see the daily account batch accrue interest on active savings
 accounts and print total assets under management — straight out of COBOL.
+
+## Run the bridge
+
+The bridge parses the legacy fixed-width account master and serves it as
+JSON. It needs the .NET 8 SDK locally, or just Docker.
+
+```bash
+# locally
+dotnet run --project src/CobraBridge.Bridge
+
+# or as part of the full stack (legacy-core + bridge)
+docker compose up legacy-core bridge
+```
+
+By default it reads `legacy-core/data/ACCOUNTS.DAT` from the repo root;
+override the location with the `Legacy:AccountsFile` configuration key
+(appsettings.json, `--Legacy:AccountsFile=<path>`, or the
+`Legacy__AccountsFile` env var — already set in docker-compose to point at
+the shared `legacy-data` volume).
+
+```bash
+curl http://localhost:5080/health
+curl http://localhost:5080/accounts
+curl http://localhost:5080/accounts/ACCT000002
+```
+
+Swagger UI is available at `http://localhost:5080/swagger` when running in
+the `Development` environment (the default for `dotnet run`).
+
+```bash
+dotnet test src/CobraBridge.sln
+```
 
 ## Repository layout
 

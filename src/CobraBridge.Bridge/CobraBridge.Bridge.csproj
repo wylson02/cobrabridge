@@ -7,6 +7,10 @@
     <RootNamespace>CobraBridge.Bridge</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
+  </ItemGroup>
+
   <!--
     Phase 2 scaffold: the anti-corruption layer.
     Translates fixed-width COBOL account records into modern domain
