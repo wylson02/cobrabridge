@@ -1,7 +1,7 @@
-using CobraBridge.Bridge.Domain;
-using CobraBridge.Bridge.Legacy;
+using CobraBridge.Domain;
+using CobraBridge.Domain.Legacy;
 
-namespace CobraBridge.Bridge.Tests;
+namespace CobraBridge.Domain.Tests;
 
 public class FixedWidthAccountParserTests
 {

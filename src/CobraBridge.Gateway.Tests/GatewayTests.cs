@@ -24,12 +24,12 @@ public class GatewayTests
         Assert.Contains("healthy", body);
     }
 
-    // Proves the actual YARP behavior that matters: a request to
-    // /api/accounts/{id} is routed to the "bridge" cluster with the
-    // "/api" prefix stripped, so the upstream sees its native /accounts
-    // path. Backed by a real (fake) HTTP server, not a mock of YARP itself.
+    // Proves the actual YARP behavior that matters: by default (AccountsSource
+    // unset -> "legacy"), a request to /api/accounts/{id} is routed to the
+    // Bridge with the "/api" prefix stripped. Backed by a real (fake) HTTP
+    // server, not a mock of YARP itself.
     [Fact]
-    public async Task ApiAccountsRoute_ProxiesToBridgeCluster_AndStripsApiPrefix()
+    public async Task ApiAccountsRoute_DefaultsToLegacy_ProxiesToBridgeAndStripsApiPrefix()
     {
         await using var fakeBridge = await FakeUpstream.StartAsync();
 
@@ -40,7 +40,7 @@ public class GatewayTests
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ReverseProxy:Clusters:bridge:Destinations:bridge1:Address"] = fakeBridge.Address
+                        ["Services:Bridge"] = fakeBridge.Address
                     });
                 });
             });
@@ -52,8 +52,65 @@ public class GatewayTests
         Assert.Equal("/accounts/ACCT000002", fakeBridge.LastReceivedPath);
     }
 
-    // A minimal Kestrel host standing in for the Bridge, so the test
-    // verifies real proxying instead of asserting against YARP's config model.
+    // The Strangler switch itself: flipping AccountsSource to "modern"
+    // re-points the same /api/accounts route at AccountsService instead of
+    // the Bridge — no route changes, no client-visible difference.
+    [Fact]
+    public async Task ApiAccountsRoute_WhenAccountsSourceIsModern_ProxiesToAccountsService()
+    {
+        await using var fakeAccountsService = await FakeUpstream.StartAsync();
+
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["AccountsSource"] = "modern",
+                        ["Services:AccountsService"] = fakeAccountsService.Address
+                    });
+                });
+            });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/accounts");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("/accounts", fakeAccountsService.LastReceivedPath);
+    }
+
+    [Theory]
+    [InlineData(null, "legacy")]
+    [InlineData("modern", "modern")]
+    public async Task MigrationStatus_ReflectsConfiguredAccountsSource(string? configuredSource, string expectedSource)
+    {
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                if (configuredSource is not null)
+                {
+                    builder.ConfigureAppConfiguration((_, config) =>
+                    {
+                        config.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["AccountsSource"] = configuredSource
+                        });
+                    });
+                }
+            });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/_migration/status");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains($"\"accountsSource\":\"{expectedSource}\"", body);
+    }
+
+    // A minimal Kestrel host standing in for whichever backend is under
+    // test, so these tests verify real proxying instead of asserting
+    // against YARP's config model.
     private sealed class FakeUpstream : IAsyncDisposable
     {
         private readonly WebApplication _app;

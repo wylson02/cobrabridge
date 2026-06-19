@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using CobraBridge.Bridge.Domain;
-using CobraBridge.Bridge.Legacy;
+using CobraBridge.Domain;
+using CobraBridge.Domain.Legacy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +32,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-var dataPath = ResolveAccountsFilePath(builder.Configuration);
+var dataPath = LegacyDataLocator.ResolveAccountsFilePath(
+    builder.Configuration["Legacy:AccountsFile"], AppContext.BaseDirectory);
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
     .WithName("GetHealth")
@@ -74,43 +75,6 @@ app.MapGet("/accounts/{id}", (string id) =>
     .ProducesProblem(StatusCodes.Status500InternalServerError);
 
 app.Run();
-
-/// <summary>
-/// Resolves the path to the legacy ACCOUNTS.DAT master.
-///
-/// Resolution order:
-///   1. Explicit configuration key "Legacy:AccountsFile" (appsettings.json,
-///      command line --Legacy:AccountsFile=..., or the env var
-///      Legacy__AccountsFile — ASP.NET Core maps "__" to ":" automatically).
-///   2. Repo-relative default: walk up from the executable's directory
-///      looking for a "legacy-core/data" folder, so the default works the
-///      same whether running from bin/Debug, bin/Release, or `dotnet run`.
-/// </summary>
-static string ResolveAccountsFilePath(IConfiguration configuration)
-{
-    var configured = configuration["Legacy:AccountsFile"];
-    if (!string.IsNullOrWhiteSpace(configured))
-        return Path.GetFullPath(configured);
-
-    var repoRoot = FindAncestorContaining(AppContext.BaseDirectory, Path.Combine("legacy-core", "data"));
-    if (repoRoot is null)
-        throw new InvalidOperationException(
-            $"Could not locate the 'legacy-core/data' folder above '{AppContext.BaseDirectory}', " +
-            "and no Legacy:AccountsFile override was configured. " +
-            "Set it via appsettings.json, --Legacy:AccountsFile=<path>, or the Legacy__AccountsFile env var.");
-
-    return Path.Combine(repoRoot, "legacy-core", "data", "ACCOUNTS.DAT");
-}
-
-static string? FindAncestorContaining(string startDirectory, string relativePathToFind)
-{
-    for (var dir = new DirectoryInfo(startDirectory); dir is not null; dir = dir.Parent)
-    {
-        if (Directory.Exists(Path.Combine(dir.FullName, relativePathToFind)))
-            return dir.FullName;
-    }
-    return null;
-}
 
 static string LegacyFileNotFoundMessage(string path) =>
     $"Legacy data file not found at '{path}'. " +

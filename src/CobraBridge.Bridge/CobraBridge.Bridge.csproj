@@ -11,6 +11,10 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CobraBridge.Domain\CobraBridge.Domain.csproj" />
+  </ItemGroup>
+
   <!--
     Phase 2 scaffold: the anti-corruption layer.
     Translates fixed-width COBOL account records into modern domain

@@ -1,6 +1,4 @@
-using CobraBridge.Bridge.Domain;
-
-namespace CobraBridge.Bridge.Legacy;
+namespace CobraBridge.Domain.Legacy;
 
 /// <summary>
 /// The load-bearing piece of the anti-corruption layer.
@@ -9,6 +7,10 @@ namespace CobraBridge.Bridge.Legacy;
 /// legacy-core/cobol/copybooks/ACCOUNT.cpy) into a clean domain model.
 /// The positional offsets here are a contract with the COBOL copybook:
 /// if one moves, both move.
+///
+/// Shared by the Bridge (serves it live) and the AccountsService's legacy
+/// seeder (migrates it into PostgreSQL once) — there is exactly one parser
+/// for this format.
 ///
 ///   Pos   Len  Field         Picture
 ///   1     10   ACCT-ID       X(10)

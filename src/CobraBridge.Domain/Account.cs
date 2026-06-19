@@ -1,8 +1,9 @@
-namespace CobraBridge.Bridge.Domain;
+namespace CobraBridge.Domain;
 
 /// <summary>
 /// The modern, clean representation of an account — what the rest of the
-/// system speaks. The legacy fixed-width record never escapes the bridge.
+/// system speaks, whether it's served from the legacy COBOL master or from
+/// PostgreSQL. The legacy fixed-width record never escapes the bridge.
 /// </summary>
 public sealed record Account
 {

@@ -33,7 +33,7 @@ Full picture: [docs/architecture.md](docs/architecture.md).
 |-------|------------|
 | Legacy core | GnuCOBOL, fixed-width flat files |
 | Anti-corruption layer (the bridge) | C# / .NET 8 |
-| Microservices | ASP.NET Core (.NET 8) |
+| Microservices | ASP.NET Core (.NET 8), EF Core + PostgreSQL |
 | API gateway | YARP |
 | Messaging | RabbitMQ + MassTransit |
 | Real-time | SignalR |
@@ -48,7 +48,7 @@ Full picture: [docs/architecture.md](docs/architecture.md).
 | 0 | Foundations (repo, docs, ADRs, compose, CI) | ✅ done |
 | 1 | Legacy core: COBOL batch + data, containerized | ✅ runs today |
 | 2 | The bridge: COBOL → JSON over HTTP | ✅ done |
-| 3 | Microservices behind the gateway | 🟡 in progress (3a: gateway) |
+| 3 | Microservices behind the gateway | 🟡 in progress (3a: gateway, 3b: accounts + strangler switch) |
 | 4 | Event-driven + real-time dashboard | ⬜ planned |
 | 5 | CI/CD hardening, observability, tests | ⬜ planned |
 
@@ -126,6 +126,47 @@ curl http://localhost:5090/api/accounts/ACCT000002
 
 # through docker-compose (gateway published on host port 8090)
 curl http://localhost:8090/api/accounts
+```
+
+## Run the modern stack and flip the Strangler switch
+
+Phase 3b adds the modern half of the Strangler swap: **AccountsService**, a
+PostgreSQL-backed ASP.NET Core service that serves the exact same
+`/accounts` JSON contract as the Bridge. On startup it applies its EF Core
+migrations and migrates the legacy account master into Postgres (idempotent
+— safe to restart).
+
+The gateway decides, per request, which one actually answers
+`GET /api/accounts*`: the **`AccountsSource`** setting, `"legacy"` (Bridge/
+COBOL, the default) or `"modern"` (AccountsService/Postgres). Same route,
+same JSON shape, zero client-visible change — that's the whole point.
+
+```bash
+# full stack, legacy source (default)
+docker compose up -d legacy-core postgres bridge accounts-service gateway
+
+curl http://localhost:8090/api/_migration/status   # {"accountsSource":"legacy", ...}
+curl http://localhost:8090/api/accounts
+
+# flip the switch — only the gateway needs to restart
+ACCOUNTS_SOURCE=modern docker compose up -d gateway
+
+curl http://localhost:8090/api/_migration/status   # {"accountsSource":"modern", ...}
+curl http://localhost:8090/api/accounts            # same accounts, now from Postgres
+```
+
+Locally (without Docker), set the same env var before `dotnet run` on the
+gateway: `AccountsSource=modern dotnet run --project src/CobraBridge.Gateway`
+(with the Bridge and AccountsService both already running — see
+`Services:Bridge` / `Services:AccountsService` in
+`src/CobraBridge.Gateway/appsettings.json` for their default local URLs).
+
+`postgres` and `accounts-service` have no published ports in docker-compose
+— like the bridge, they're internal-only, reached by name on the compose
+network.
+
+```bash
+dotnet test src/CobraBridge.sln
 ```
 
 ## Repository layout
