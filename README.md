@@ -48,7 +48,7 @@ Full picture: [docs/architecture.md](docs/architecture.md).
 | 0 | Foundations (repo, docs, ADRs, compose, CI) | ✅ done |
 | 1 | Legacy core: COBOL batch + data, containerized | ✅ runs today |
 | 2 | The bridge: COBOL → JSON over HTTP | ✅ done |
-| 3 | Microservices behind the gateway | ⬜ planned |
+| 3 | Microservices behind the gateway | 🟡 in progress (3a: gateway) |
 | 4 | Event-driven + real-time dashboard | ⬜ planned |
 | 5 | CI/CD hardening, observability, tests | ⬜ planned |
 
@@ -100,6 +100,32 @@ the `Development` environment (the default for `dotnet run`).
 
 ```bash
 dotnet test src/CobraBridge.sln
+```
+
+## Run the gateway
+
+Phase 3a adds a YARP API gateway as the system's single public entry point.
+It proxies `/api/accounts*` to the bridge, stripping the `/api` prefix.
+
+```bash
+# locally — needs the bridge running too (see above)
+dotnet run --project src/CobraBridge.Gateway
+
+# or as the full stack (legacy-core + bridge + gateway)
+docker compose up legacy-core bridge gateway
+```
+
+In docker-compose, only the gateway publishes a port — the bridge is
+internal-only, reached by the gateway over the compose network at
+`http://bridge:8080`.
+
+```bash
+curl http://localhost:5090/health          # gateway itself (dotnet run)
+curl http://localhost:5090/api/accounts
+curl http://localhost:5090/api/accounts/ACCT000002
+
+# through docker-compose (gateway published on host port 8090)
+curl http://localhost:8090/api/accounts
 ```
 
 ## Repository layout

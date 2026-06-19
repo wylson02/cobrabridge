@@ -67,9 +67,15 @@ Strangler Fig story into something a recruiter can *see* in ten seconds.
 | 0 | Foundations: repo, docs, ADRs, docker-compose skeleton, CI | **done** |
 | 1 | Legacy core: GnuCOBOL batch + fixed-width data (containerized) | **done** |
 | 2 | The bridge (ACL): C# service wrapping COBOL, first modern endpoint | **done** |
-| 3 | Microservices behind the YARP gateway | planned |
+| 3 | Microservices behind the YARP gateway | **in progress (3a: gateway)** |
 | 4 | Event-driven + real-time React/SignalR dashboard | planned |
 | 5 | CI/CD hardening, observability, tests, polish | planned |
+
+Phase 3a delivered the gateway itself: CobraBridge.Gateway is now the
+system's single public entry point, proxying `/api/accounts*` to the bridge
+via config-driven YARP routes/clusters. The bridge lost its public port —
+it's reachable only through the gateway now. Phases 3b–d (accounts,
+transactions, customers microservices behind the gateway) are not built yet.
 
 ## Repository layout
 
@@ -81,8 +87,10 @@ cobrabridge/
 │   ├── architecture.md         # this file
 │   └── adr/                    # architecture decision records
 ├── legacy-core/                # the COBOL "mainframe" (Phase 1, runs today)
-├── src/                        # .NET solution (gateway, services, bridge)
-│   ├── CobraBridge.Bridge/       # anti-corruption layer (Phase 2, done)
-│   └── CobraBridge.Bridge.Tests/ # unit tests for the legacy parser
+├── src/                         # .NET solution (gateway, services, bridge)
+│   ├── CobraBridge.Bridge/        # anti-corruption layer (Phase 2, done)
+│   ├── CobraBridge.Bridge.Tests/  # unit tests for the legacy parser
+│   ├── CobraBridge.Gateway/       # YARP API gateway (Phase 3a, done)
+│   └── CobraBridge.Gateway.Tests/ # health + routing tests for the gateway
 └── .github/workflows/ci.yml    # build + test pipeline
 ```

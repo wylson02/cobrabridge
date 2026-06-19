@@ -1,5 +1,7 @@
 # CobraBridge — local orchestration.
-# Phase 1 (legacy-core) and Phase 2 (bridge) run today. Later phases are
+# Phase 1 (legacy-core), Phase 2 (bridge), and Phase 3a (gateway) run today.
+# The gateway is the only service with a published port: everything else is
+# reachable only on the internal compose network. Later phases are
 # scaffolded and commented until their services exist, so
 # `docker compose up` always works.
 
@@ -21,13 +23,26 @@ services:
       - Legacy__AccountsFile=/legacy/data/ACCOUNTS.DAT
     volumes:
       - legacy-data:/legacy/data:ro
-    ports:
-      - "5080:8080"
+    # No published port: internal-only, reached by the gateway via the
+    # "bridge" service name on the compose network.
     depends_on:
       - legacy-core
 
-  # --- Phase 3: gateway + microservices ---
-  # gateway:        { } # YARP
+  # --- Phase 3a: API gateway (YARP) — the single public entry point ---
+  gateway:
+    build: ./src/CobraBridge.Gateway
+    image: cobrabridge-gateway
+    container_name: cobrabridge-gateway
+    environment:
+      - ReverseProxy__Clusters__bridge__Destinations__bridge1__Address=http://bridge:8080
+    ports:
+      # Host 8080 is taken by an unrelated local container on this machine;
+      # the gateway still listens on 8080 inside its own container.
+      - "8090:8080"
+    depends_on:
+      - bridge
+
+  # --- Phase 3b/c/d: microservices behind the gateway ---
   # accounts-svc:   { }
   # transactions-svc: { }
   # customers-svc:  { }
