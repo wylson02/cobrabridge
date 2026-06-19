@@ -1,0 +1,18 @@
+# .NET
+bin/
+obj/
+*.user
+# COBOL build artifacts
+legacy-core/bin/
+*.so
+*.o
+# Generated batch output
+legacy-core/data/ACCTRPT.TXT
+# Node / React (future)
+node_modules/
+dist/
+# Editor
+.vs/
+.idea/
+*.swp
+.DS_Store

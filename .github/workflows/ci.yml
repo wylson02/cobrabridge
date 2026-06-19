@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  legacy-core:
+    name: Legacy core (COBOL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GnuCOBOL
+        run: sudo apt-get update && sudo apt-get install -y gnucobol
+      - name: Compile batch
+        run: |
+          cd legacy-core
+          mkdir -p bin
+          cobc -x -free -I cobol/copybooks -o bin/acctlist cobol/ACCTLIST.cbl
+      - name: Run batch smoke test
+        run: |
+          cd legacy-core/data
+          ../bin/acctlist
+          test -f ACCTRPT.TXT && echo "report generated"
+
+  bridge:
+    name: Bridge (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build src/CobraBridge.sln -c Release
+      # - name: Test
+      #   run: dotnet test src/CobraBridge.sln -c Release   # enable when tests land
